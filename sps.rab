@@ -5,7 +5,7 @@
 : author
    Kazuhiro NISHIYAMA
 # : institution
-#    所属
+#    株式会社ブロードエンタープライズ
 : content-source
    LLまつり
 : date
@@ -15,14 +15,202 @@
 # : theme
 #    default
 
-= 最初のスライド
+== Note
+Note は大文字の I で表示
 
-  * 項目1
-  * 項目2
-  * 項目3
+= 背景
 
-= 二番目のスライド
+  * 背景
+    * 集合住宅向けの高速インターネットサービス (B-CUBIC)
+    * VPN で遠隔からルーターなどの状態確認や設定変更
+  * 目的
+    * その VPN の接続状態を監視したい
+
+== Note
+今回のプログラムを作った背景として、まず、
+今の会社では、こういうサービスをやっていて、
+IPsec VPN で社内からルーターなどのネットワーク機器の操作を出来るようにしています。
+その VPN の接続状態を監視したいということで、今回のプログラムを作りました。
+
+= 監視
+  * Zabbix などを併用
+    * SNMP などで詳細情報
+== Note
+監視システムとして、流量などの詳細データの監視には Zabbix を併用しています。
+
+= Zabbix の問題点 (1)
+  * 大量ホストの登録が大変
+    * ホスト自体の追加
+      * これは自動登録やAPIである程度省力化可能
+    * まとめて見るためのグラフなどの追加
+      * 特に複数ホストをまとめるのは大変
+== Note
+その zabbix の問題点として大量のホストを登録するのが大変ということがありました。
+特に複数ホストを横断的にまとめるビューを作るのが大変です。
+
+= Zabbix の問題点 (2)
+  * 監視自体も重い
+    * ホストごとにfpingを実行 (ping監視)
+    * 同時実行数を増やす → データベースのコネクション数があふれる
+== Note
+さらに zabbix はその仕組み上、ホストが多いと監視自体も重くなります。
+= 簡易ping監視
+  * 登録が簡単
+  * 依存は最小限
+    * bash, GNU coreutils, fping, ImageMagick の convert
+  * 結果表示
+    * 単純な画像で全体像の把握だけ
+== Note
+そういう問題点に対処するためにシェルスクリプトで簡易ping監視システムを作りました。
+登録が簡単で依存は最小限にして、結果表示は単純な画像で全体像を把握するだけという
+割り切ったシステムにしました。
+
+= 単純な画像
+  * ping 応答の有無のみ
+    * 応答時間なし
+  * IPアドレスも出さない
+    * IPアドレス順にはしている
+  * 時刻も出さない
+    * cron で定期実行している
+== Note
+単純な画像というのはどういうことかというと、
+まず ping 応答の有無のみにして、
+簡潔な表示するためIPアドレスや時刻は画像には直接は出さないことにしました。
+
+= summary.html
+  # image
+  # src = ping-results.png
+  # relative_height = 100
+== Note
+説明だけだとわかりにくいので、ここで最終的な HTML のスクリーンショットを載せておきます。
+緑が alive で、赤が unreachable なホストです。
+これは自宅 LAN と OpenVPN で使っているサブネットの情報なのでほとんどが unreachable になっています。
+
+X軸方向がIPアドレスで、例えば右上の画像なら 192.168.253.1 から 192.168.253.254 までになります。
+Y軸方向は時刻です。
+cron で10分ごとに実行していて、上が0時で下に伸びていくようになっています。
+
+= 画像の説明
+  * 緑: alive, 赤: unreachable
+  * X軸: IPアドレス, Y軸: 時刻 (上が0時で下が新しい)
+  * 最近の画像は symlink で先ほどの summary.html から参照
 
   # image
-  # src = https://raw.github.com/rabbit-shocker/rabbit/master/sample/lavie.png
-  # relative_height = 100
+  # src = yesterday.png
+
+== Note
+先ほどの最近の画像を一覧する HTML は動的生成ではなく別途用意しています。
+cron で自動で更新するのは画像だけで、先ほどの HTML からはシンボリックで日付が変わっても最近の画像をさし続けられるようにしています。
+
+= 実装 (1) データ収集
+  * 複数ホストの指定方法は bash の brace expansion
+    * 例1: (({172.16.{0..255}.254}))
+    * 例2: (({192.168.1.{1..254}}))
+  * ping 送信は fping -r 0
+    * -r 0 でリトライせずにすぐに終わる
+== Note
+ここからは実装の中身の話です。
+最初の実装上の工夫は複数ホストの指定にブレース展開を使ったところです。
+この機能のために /bin/sh ではなく bash を使うことにしました。
+
+次に fping はデフォルトだと3回リトライしてタイムアウトを待ってしまい、
+かなり時間がかかるので、リトライ回数を0にしてすぐ終わるようにしています。
+
+= 実装 (2) データ収集
+    collect () {
+      IP_PREFIX=$1
+      IP_RANGE=${2:-"{1..254}"}
+      OUT_FILE="data/$IP_PREFIX/$(date '+%Y%m%d/%H%M%S').out"
+      trap "rm -f $OUT_FILE" 1 2 3 15
+      mkdir -p "$(dirname "$OUT_FILE")"
+      {
+        eval set -- $IP_PREFIX.$IP_RANGE
+        for ip; do
+          echo "$ip"
+         done
+      } | fping -r 0 >"$OUT_FILE"
+      trap "" 1 2 3 15
+    }
+== Note
+実際のデータ収集部分の実装はこうなっています。
+
+eval set のところでブレース展開しています。
+それから、後の処理のために trap で中途半端な行数のファイルが残らないようにしています。
+収集したデータは fping の出力をファイルにそのまま保存しているので、IPアドレス順にはなっていません。
+
+= fping の出力例
+  192.168.253.1 is alive
+  192.168.253.24 is alive
+  192.168.253.29 is alive
+  192.168.253.108 is alive
+  192.168.253.109 is alive
+  192.168.253.112 is alive
+  192.168.253.113 is alive
+  192.168.253.114 is alive
+  192.168.253.2 is unreachable
+  192.168.253.3 is unreachable
+  192.168.253.4 is unreachable
+  192.168.253.5 is unreachable
+  192.168.253.6 is unreachable
+  192.168.253.7 is unreachable
+  192.168.253.8 is unreachable
+  192.168.253.9 is unreachable
+  192.168.253.10 is unreachable
+== Note
+fping の出力は結果がわかった順に出力されているからか、
+このように alive が先に出てきて unreachable が後に並ぶようです。
+
+= 実装 (3) 画像生成
+  * IPアドレス順は sort -V
+    * GNU coreutils の((*バージョンソート*))
+    * ls -v と同じ機能
+  * 画像生成
+    * シェルスクリプトで xpm 生成
+    * xpm はブラウザの対応に難あり
+    * convert で png に変換
+== Note
+次に画像生成部分の話です。
+画像のX軸方向に並べるのにIPアドレス順にソートする必要があるのですが、
+GNU coreutils のバージョンソートがこの用途にうまくはまりました。
+シェルスクリプトでIPv4アドレスを扱うことがあればオススメなので
+ぜひ覚えておいてください。
+
+画像生成はシェルスクリプトでも生成出来る画像ということで、
+テキストベースの画像形式は xbm か xpm をよく使うのですが、
+今回は色をつけるために xpm にしました。
+xpm のままだとブラウザが対応していないことがあるので、
+ImageMagick の convert コマンドで png に変換するようにしました。
+
+= 実装 (4) 画像生成
+    to_xpm () {
+      OUT_DIR="$1"
+      WIDTH=0
+      HEIGHT=0
+      for f in "$OUT_DIR"/*.out; do
+        HEIGHT=$[$HEIGHT + 1]
+      done
+      WIDTH="$(wc -l < "$f")"
+      cat <<EOF
+    static const char* const xpm[] = {
+        "$WIDTH $HEIGHT 3 1",
+        "  c None",
+        "A c #00FF00",
+        "U c #FF0000",
+    EOF
+      for f in "$OUT_DIR"/*.out; do
+        echo -n '    "'
+        sort -V $f | awk -v ORS= '/alive/{print "A"}/unreachable/{print "U"}'
+        echo '",'
+      done
+      echo '};'
+    }
+== Note
+実際の xpm の生成部分はこうなっています。
+
+for ループのところの glob でY軸の時刻順にソートはされているので、
+X軸のIPアドレス順ソートを sort -V でやっています。
+そして awk で1行を1文字に変換しています。
+
+= trap "echo $URL" 0
+  * https://github.com/znz/simple-ping-summary
+
