@@ -211,8 +211,15 @@ for ループのところの glob でY軸の時刻順にソートはされてい
 X軸のIPアドレス順ソートを sort -V でやっています。
 そして awk で1行を1文字に変換しています。
 
+= シェル便利
+  * 簡易なものにシェルは便利
+    * このシステムで 200 行ぐらい
+    * ポータブルにするため複雑な機能は避けたい
+    * と思ったら declare -A が bash4 依存だった
+    * sort と gsort とか .../sbin/fping とか
+  * 複雑なら ruby とか使う
+
 = デモ
 
 = trap "echo $URL" 0
   * https://github.com/znz/simple-ping-summary
-
