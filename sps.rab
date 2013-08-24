@@ -3,7 +3,7 @@
 # : subtitle
 #    サブタイトル
 : author
-   Kazuhiro NISHIYAMA
+   西山和広 (@znz)
 # : institution
 #    株式会社ブロードエンタープライズ
 : content-source
@@ -210,6 +210,8 @@ ImageMagick の convert コマンドで png に変換するようにしました
 for ループのところの glob でY軸の時刻順にソートはされているので、
 X軸のIPアドレス順ソートを sort -V でやっています。
 そして awk で1行を1文字に変換しています。
+
+= デモ
 
 = trap "echo $URL" 0
   * https://github.com/znz/simple-ping-summary
