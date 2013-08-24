@@ -223,3 +223,4 @@ X軸のIPアドレス順ソートを sort -V でやっています。
 
 = trap "echo $URL" 0
   * https://github.com/znz/simple-ping-summary
+  * http://www.slideshare.net/znzjp/simple-ping-summary
